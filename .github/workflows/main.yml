@@ -1,0 +1,44 @@
+name: Build Android Kernel with KSU-Next
+
+on:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential curl flex g++-aarch64-linux-gnu gcc-aarch64-linux-gnu libssl-dev libelf-dev python3
+
+      - name: Inject KernelSU-Next
+        run: |
+          # Fetch and apply the hooks
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+
+      - name: Configure Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          # Generate config
+          make YOUR_DEFCONFIG_NAME
+          # Force enable KSU
+          echo "CONFIG_KSU=y" >> .config
+          make olddefconfig
+
+      - name: Compile Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          # Use -j$(nproc) because GitHub Actions runners are powerful
+          make -j$(nproc)
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-kernel
+          path: arch/arm64/boot/YOUR_IMAGE_NAME # e.g., Image.gz-dtb
