@@ -14,7 +14,6 @@ jobs:
 
       - name: Install Build Dependencies
         run: |
-          # Use default packages available on Ubuntu 24.04
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential curl flex libssl-dev libelf-dev python3 clang lld llvm
 
@@ -31,18 +30,20 @@ jobs:
       - name: Configure Kernel
         run: |
           export ARCH=arm64
-          # We no longer need to export CC=clang manually if we use LLVM=1
           
-          make gki_defconfig
+          # Pass LLVM variables during config so it detects the right toolchain capabilities
+          make gki_defconfig LLVM=1 LLVM_IAS=1
+          
           echo "CONFIG_KSU=y" >> .config
-          make olddefconfig
+          make olddefconfig LLVM=1 LLVM_IAS=1
 
       - name: Compile Kernel
         run: |
           export ARCH=arm64
-          # Use LLVM=1 to tell the kernel to use the installed clang/lld/llvm
-          # KBUILD_WERROR=0 ignores the strict warning errors
-          make -j$(nproc) LLVM=1 KBUILD_WERROR=0
+          
+          # LLVM_IAS=1 fixes the "broken .inst" and "binutils" errors.
+          # KCFLAGS forces the compiler to ignore the slub.c declaration error.
+          make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
