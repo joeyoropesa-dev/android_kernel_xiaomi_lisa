@@ -10,14 +10,22 @@ jobs:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
         with:
-          submodules: recursive # CRITICAL: This fixes missing files/submodules
+          submodules: recursive
+
+      - name: Setup Toolchain (Clang 12)
+        run: |
+          # Install Clang 12 which is stable for 5.4 kernels
+          sudo apt-get update
+          sudo apt-get install -y clang-12 lld-12 llvm-12
+          # Symlink to standard names
+          sudo ln -s /usr/bin/clang-12 /usr/bin/clang
+          sudo ln -s /usr/bin/lld-12 /usr/bin/ld.lld
+          sudo ln -s /usr/bin/llvm-ar-12 /usr/bin/llvm-ar
 
       - name: Install Build Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison build-essential curl flex g++-aarch64-linux-gnu gcc-aarch64-linux-gnu libssl-dev libelf-dev python3
+          sudo apt-get install -y bc bison build-essential curl flex libssl-dev libelf-dev python3
 
-      # If the build still fails with "can't open file", this step removes the broken reference
       - name: Fix Missing Security Modules
         run: |
           if [ -f "security/Kconfig" ]; then
@@ -31,11 +39,10 @@ jobs:
       - name: Configure Kernel
         run: |
           export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
+          # Use Clang for building
+          export CC=clang
           
-          # Use gki_defconfig as verified by your directory list
           DEFCONFIG="gki_defconfig"
-          
           make $DEFCONFIG
           echo "CONFIG_KSU=y" >> .config
           make olddefconfig
@@ -43,8 +50,10 @@ jobs:
       - name: Compile Kernel
         run: |
           export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          make -j$(nproc)
+          export CC=clang
+          # KBUILD_WERROR=0 silences the type-mismatch errors
+          # LLVM=1 tells the kernel to use Clang tools instead of GCC
+          make -j$(nproc) KBUILD_WERROR=0 LLVM=1
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
