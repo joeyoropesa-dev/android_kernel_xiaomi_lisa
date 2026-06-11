@@ -43,10 +43,17 @@ jobs:
             sed -i 's/tcsr_boot_misc) {}/tcsr_boot_misc) { return 0; }/g' include/linux/qcom_scm.h
           fi
 
+          # Fix 3: KernelSU SECCOMP_ARCH_NATIVE_NR undeclared in 5.4
+          # Replaces the modern SECCOMP constant with the legacy 5.4 equivalent
+          if [ -d "drivers/kernelsu" ]; then
+            grep -rl "SECCOMP_ARCH_NATIVE_NR" drivers/kernelsu/ | xargs -r sed -i 's/SECCOMP_ARCH_NATIVE_NR/__NR_syscalls/g'
+          fi
+
       - name: Configure Kernel
         run: |
           export ARCH=arm64
           
+          # Pass LLVM variables during config so it detects the right toolchain capabilities
           make gki_defconfig LLVM=1 LLVM_IAS=1
           
           echo "CONFIG_KSU=y" >> .config
@@ -56,7 +63,8 @@ jobs:
         run: |
           export ARCH=arm64
           
-          # Added -Wno-return-type to KCFLAGS to prevent similar techpack errors
+          # LLVM_IAS=1 fixes the "broken .inst" and "binutils" errors.
+          # KCFLAGS forces the compiler to ignore the slub.c declaration error and techpack return errors.
           make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-return-type"
 
       - name: Upload Kernel Artifact
