@@ -1,7 +1,7 @@
-name: Build Android Kernel with KSU-Next
+name: Build Android Kernel
 
 on:
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   build:
@@ -17,16 +17,28 @@ jobs:
 
       - name: Inject KernelSU-Next
         run: |
-          # Fetch and apply the hooks
+          # Use 'next' branch as requested
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Configure Kernel
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # Generate config
-          make YOUR_DEFCONFIG_NAME
-          # Force enable KSU
+          
+          # 1. Verify defconfig exists
+          DEFCONFIG="YOUR_DEFCONFIG_NAME" # CHANGE THIS to your filename (e.g., vostro_defconfig)
+          if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
+            echo "Error: Config file not found at arch/arm64/configs/$DEFCONFIG"
+            echo "Available configs:"
+            ls arch/arm64/configs/
+            exit 1
+          fi
+
+          # 2. Generate initial .config
+          make $DEFCONFIG
+          
+          # 3. Enable KSU and ensure config is valid
+          # We use a safer append method here
           echo "CONFIG_KSU=y" >> .config
           make olddefconfig
 
@@ -34,11 +46,11 @@ jobs:
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # Use -j$(nproc) because GitHub Actions runners are powerful
+          # Use -j$(nproc) for GitHub's powerful servers
           make -j$(nproc)
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: compiled-kernel
-          path: arch/arm64/boot/YOUR_IMAGE_NAME # e.g., Image.gz-dtb
+          path: arch/arm64/boot/Image.gz-dtb # Update this to match your kernel output
