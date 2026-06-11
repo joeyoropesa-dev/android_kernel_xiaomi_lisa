@@ -12,19 +12,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Toolchain (Clang 12)
-        run: |
-          # Install Clang 12 which is stable for 5.4 kernels
-          sudo apt-get update
-          sudo apt-get install -y clang-12 lld-12 llvm-12
-          # Symlink to standard names
-          sudo ln -s /usr/bin/clang-12 /usr/bin/clang
-          sudo ln -s /usr/bin/lld-12 /usr/bin/ld.lld
-          sudo ln -s /usr/bin/llvm-ar-12 /usr/bin/llvm-ar
-
       - name: Install Build Dependencies
         run: |
-          sudo apt-get install -y bc bison build-essential curl flex libssl-dev libelf-dev python3
+          # Use default packages available on Ubuntu 24.04
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential curl flex libssl-dev libelf-dev python3 clang lld llvm
 
       - name: Fix Missing Security Modules
         run: |
@@ -39,21 +31,18 @@ jobs:
       - name: Configure Kernel
         run: |
           export ARCH=arm64
-          # Use Clang for building
-          export CC=clang
+          # We no longer need to export CC=clang manually if we use LLVM=1
           
-          DEFCONFIG="gki_defconfig"
-          make $DEFCONFIG
+          make gki_defconfig
           echo "CONFIG_KSU=y" >> .config
           make olddefconfig
 
       - name: Compile Kernel
         run: |
           export ARCH=arm64
-          export CC=clang
-          # KBUILD_WERROR=0 silences the type-mismatch errors
-          # LLVM=1 tells the kernel to use Clang tools instead of GCC
-          make -j$(nproc) KBUILD_WERROR=0 LLVM=1
+          # Use LLVM=1 to tell the kernel to use the installed clang/lld/llvm
+          # KBUILD_WERROR=0 ignores the strict warning errors
+          make -j$(nproc) LLVM=1 KBUILD_WERROR=0
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
