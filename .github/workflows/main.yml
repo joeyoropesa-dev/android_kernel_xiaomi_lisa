@@ -27,11 +27,26 @@ jobs:
         run: |
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
+      - name: Patch Source Code Errors
+        run: |
+          echo "Applying automatic code fixes for Kernel 5.4 compatibility..."
+          
+          # Fix 1: KernelSU pgtable.h incompatibility for 5.4 kernels
+          # Replaces <linux/pgtable.h> with <asm/pgtable.h> in all KernelSU files
+          if [ -d "drivers/kernelsu" ]; then
+            grep -rl "<linux/pgtable.h>" drivers/kernelsu/ | xargs -r sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g'
+          fi
+          
+          # Fix 2: Xiaomi techpack dummy function missing return value
+          # Injects a 'return 0;' into the empty function body
+          if [ -f "include/linux/qcom_scm.h" ]; then
+            sed -i 's/tcsr_boot_misc) {}/tcsr_boot_misc) { return 0; }/g' include/linux/qcom_scm.h
+          fi
+
       - name: Configure Kernel
         run: |
           export ARCH=arm64
           
-          # Pass LLVM variables during config so it detects the right toolchain capabilities
           make gki_defconfig LLVM=1 LLVM_IAS=1
           
           echo "CONFIG_KSU=y" >> .config
@@ -41,9 +56,8 @@ jobs:
         run: |
           export ARCH=arm64
           
-          # LLVM_IAS=1 fixes the "broken .inst" and "binutils" errors.
-          # KCFLAGS forces the compiler to ignore the slub.c declaration error.
-          make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration"
+          # Added -Wno-return-type to KCFLAGS to prevent similar techpack errors
+          make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-return-type"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
