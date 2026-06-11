@@ -1,7 +1,7 @@
 name: Build Android Kernel
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,15 +9,23 @@ jobs:
     steps:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive # CRITICAL: This fixes missing files/submodules
 
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential curl flex g++-aarch64-linux-gnu gcc-aarch64-linux-gnu libssl-dev libelf-dev python3
 
+      # If the build still fails with "can't open file", this step removes the broken reference
+      - name: Fix Missing Security Modules
+        run: |
+          if [ -f "security/Kconfig" ]; then
+            sed -i '/baseband-guard/d' security/Kconfig
+          fi
+
       - name: Inject KernelSU-Next
         run: |
-          # Use 'next' branch as requested
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Configure Kernel
@@ -25,20 +33,10 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           
-          # 1. Verify defconfig exists
-          DEFCONFIG="gki_defconfig" # CHANGE THIS to your filename (e.g., vostro_defconfig)
-          if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
-            echo "Error: Config file not found at arch/arm64/configs/$DEFCONFIG"
-            echo "Available configs:"
-            ls arch/arm64/configs/
-            exit 1
-          fi
-
-          # 2. Generate initial .config
-          make $DEFCONFIG
+          # Use gki_defconfig as verified by your directory list
+          DEFCONFIG="gki_defconfig"
           
-          # 3. Enable KSU and ensure config is valid
-          # We use a safer append method here
+          make $DEFCONFIG
           echo "CONFIG_KSU=y" >> .config
           make olddefconfig
 
@@ -46,11 +44,10 @@ jobs:
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # Use -j$(nproc) for GitHub's powerful servers
           make -j$(nproc)
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: compiled-kernel
-          path: arch/arm64/boot/Image.gz-dtb # Update this to match your kernel output
+          path: arch/arm64/boot/Image.gz-dtb
