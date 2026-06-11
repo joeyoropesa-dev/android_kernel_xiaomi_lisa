@@ -32,39 +32,42 @@ jobs:
           echo "Applying automatic code fixes for Kernel 5.4 compatibility..."
           
           # Fix 1: KernelSU pgtable.h incompatibility for 5.4 kernels
-          # Replaces <linux/pgtable.h> with <asm/pgtable.h> in all KernelSU files
           if [ -d "drivers/kernelsu" ]; then
             grep -rl "<linux/pgtable.h>" drivers/kernelsu/ | xargs -r sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g'
           fi
           
           # Fix 2: Xiaomi techpack dummy function missing return value
-          # Injects a 'return 0;' into the empty function body
           if [ -f "include/linux/qcom_scm.h" ]; then
             sed -i 's/tcsr_boot_misc) {}/tcsr_boot_misc) { return 0; }/g' include/linux/qcom_scm.h
           fi
 
           # Fix 3: KernelSU SECCOMP_ARCH_NATIVE_NR undeclared in 5.4
-          # Replaces the modern SECCOMP constant with the legacy 5.4 equivalent
           if [ -d "drivers/kernelsu" ]; then
             grep -rl "SECCOMP_ARCH_NATIVE_NR" drivers/kernelsu/ | xargs -r sed -i 's/SECCOMP_ARCH_NATIVE_NR/__NR_syscalls/g'
+          fi
+          
+          # Fix 4: Qualcomm rmnet_trace.h path resolution under LLVM
+          # Replaces '.' with the explicit relative path to the header
+          if [ -f "techpack/datarmnet/core/rmnet_trace.h" ]; then
+            sed -i 's|#define TRACE_INCLUDE_PATH .*|#define TRACE_INCLUDE_PATH techpack/datarmnet/core|g' techpack/datarmnet/core/rmnet_trace.h
+          fi
+
+          # Fix 5: KernelSU fsnotify API mismatch for Xiaomi 5.4
+          # Forces KSU to use the legacy 'handle_event' by bumping the required version check
+          if [ -f "drivers/kernelsu/manager/pkg_observer.c" ]; then
+            sed -i 's/KERNEL_VERSION(5, 3, 0)/KERNEL_VERSION(5, 13, 0)/g' drivers/kernelsu/manager/pkg_observer.c
           fi
 
       - name: Configure Kernel
         run: |
           export ARCH=arm64
-          
-          # Pass LLVM variables during config so it detects the right toolchain capabilities
           make gki_defconfig LLVM=1 LLVM_IAS=1
-          
           echo "CONFIG_KSU=y" >> .config
           make olddefconfig LLVM=1 LLVM_IAS=1
 
       - name: Compile Kernel
         run: |
           export ARCH=arm64
-          
-          # LLVM_IAS=1 fixes the "broken .inst" and "binutils" errors.
-          # KCFLAGS forces the compiler to ignore the slub.c declaration error and techpack return errors.
           make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-return-type"
 
       - name: Upload Kernel Artifact
