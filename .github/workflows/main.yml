@@ -26,7 +26,7 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           
           # 1. Verify defconfig exists
-          DEFCONFIG="YOUR_DEFCONFIG_NAME" # CHANGE THIS to your filename (e.g., vostro_defconfig)
+          DEFCONFIG="gki_defconfig" # CHANGE THIS to your filename (e.g., vostro_defconfig)
           if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
             echo "Error: Config file not found at arch/arm64/configs/$DEFCONFIG"
             echo "Available configs:"
