@@ -31,7 +31,7 @@ jobs:
         run: |
           echo "Applying automatic code fixes for Kernel 5.4 compatibility..."
           
-          # Fix 1: KernelSU pgtable.h incompatibility for 5.4 kernels
+          # Fix 1: KernelSU pgtable.h incompatibility
           if [ -d "drivers/kernelsu" ]; then
             grep -rl "<linux/pgtable.h>" drivers/kernelsu/ | xargs -r sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g'
           fi
@@ -41,19 +41,17 @@ jobs:
             sed -i 's/tcsr_boot_misc) {}/tcsr_boot_misc) { return 0; }/g' include/linux/qcom_scm.h
           fi
 
-          # Fix 3: KernelSU SECCOMP_ARCH_NATIVE_NR undeclared in 5.4
+          # Fix 3: KernelSU SECCOMP_ARCH_NATIVE_NR undeclared
           if [ -d "drivers/kernelsu" ]; then
             grep -rl "SECCOMP_ARCH_NATIVE_NR" drivers/kernelsu/ | xargs -r sed -i 's/SECCOMP_ARCH_NATIVE_NR/__NR_syscalls/g'
           fi
           
-          # Fix 4: Qualcomm rmnet_trace.h path resolution under LLVM
-          # Replaces '.' with the explicit relative path to the header
+          # Fix 4: Qualcomm rmnet_trace.h path resolution
           if [ -f "techpack/datarmnet/core/rmnet_trace.h" ]; then
-            sed -i 's|#define TRACE_INCLUDE_PATH .*|#define TRACE_INCLUDE_PATH techpack/datarmnet/core|g' techpack/datarmnet/core/rmnet_trace.h
+            sed -i 's|#define TRACE_INCLUDE_PATH .*|#define TRACE_INCLUDE_PATH .|g' techpack/datarmnet/core/rmnet_trace.h
           fi
 
-          # Fix 5: KernelSU fsnotify API mismatch for Xiaomi 5.4
-          # Forces KSU to use the legacy 'handle_event' by bumping the required version check
+          # Fix 5: KernelSU fsnotify API mismatch
           if [ -f "drivers/kernelsu/manager/pkg_observer.c" ]; then
             sed -i 's/KERNEL_VERSION(5, 3, 0)/KERNEL_VERSION(5, 13, 0)/g' drivers/kernelsu/manager/pkg_observer.c
           fi
@@ -68,7 +66,8 @@ jobs:
       - name: Compile Kernel
         run: |
           export ARCH=arm64
-          make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-return-type"
+          # We include the extra -I flag to ensure the trace headers are found
+          make -j$(nproc) LLVM=1 LLVM_IAS=1 KBUILD_WERROR=0 KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-return-type -I$(pwd)/techpack/datarmnet/core"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
